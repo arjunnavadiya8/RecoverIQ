@@ -1,0 +1,9 @@
+recoveriq:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: data/warehouse/recoveriq.duckdb
+      schema: analytics
+      threads: 1
+

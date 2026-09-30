@@ -1,0 +1,40 @@
+version: 2
+
+models:
+  - name: fact_orders
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_unique_id
+        tests: [not_null]
+      - name: order_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: [approved, canceled, created, delivered, invoiced, processing, shipped, unavailable]
+  - name: order_features
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: order_purchase_timestamp
+        tests: [not_null]
+  - name: order_outcomes
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fact_orders')
+                field: order_id
+      - name: late_delivery
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: repeat_purchase_90d
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]

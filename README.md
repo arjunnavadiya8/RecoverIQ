@@ -1,0 +1,141 @@
+# RecoverIQ
+
+**An end-to-end Product Data Science case study: predict delivery risk, measure retention harm, and design the experiment before spending on recovery offers.**
+
+> Portfolio results must use the historical Olist dataset. The included synthetic generator exists only so engineering and CI can be verified without network access.
+
+## The decision
+
+An e-commerce product lead wants to know which approved orders are most likely to arrive late, how much lateness may damage customer outcomes, and whether a proactive recovery offer is worth testing. RecoverIQ answers those as three different questions:
+
+1. **Prediction:** which orders are at risk at approval time?
+2. **Causal measurement:** what is the observational effect of late delivery on reviews and repeat purchases?
+3. **Experimentation:** what sample and economics would justify testing a recovery offer?
+
+It intentionally does **not** claim that coupons work. Olist contains no randomized recovery treatment.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Olist: 9 CSV tables] --> B[DuckDB raw schema]
+    B --> C[dbt tests and models]
+    C --> D[Approval-time features]
+    C --> E[Delivery and 90-day outcomes]
+    D --> F[Logistic and LightGBM]
+    E --> G[Cross-fitted AIPW]
+    F --> H[Calibrated risk policy]
+    G --> I[Experiment hypothesis]
+    H --> J[Streamlit decision app]
+    I --> J
+    F --> K[FastAPI + Docker]
+```
+
+## What reviewers can inspect
+
+- Relational SQL and tested dbt models rather than a single flattened notebook
+- Point-in-time seller features that exclude future delivery outcomes
+- Chronological 70/15/15 validation and a final test period touched after model selection
+- Constant, rule-based, logistic-regression and LightGBM comparisons
+- Calibration, PR-AUC, Brier score, top-decile recall and cost-based model selection
+- Doubly robust causal estimates with overlap, balance, placebo and sensitivity diagnostics
+- A budget policy simulator whose assumed offer lift is visibly labeled
+- A/B-test power, duration and sample-ratio-mismatch utilities
+- FastAPI validation, Docker packaging, CI and a decision-facing Streamlit application
+
+## Quick start
+
+Use Python 3.11–3.13; Python 3.12 is recommended.
+
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+python -m pip install -e ".[dev]"
+```
+
+### Real portfolio pipeline
+
+```bash
+make data
+make train
+make causal
+make test
+make app
+```
+
+Equivalent commands when `make` is unavailable:
+
+```powershell
+python -m recoveriq.cli download
+python -m recoveriq.cli ingest
+python -m recoveriq.cli warehouse
+python -m recoveriq.cli train
+python -m recoveriq.cli causal
+pytest
+streamlit run app.py
+```
+
+The download command retrieves the public [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce), records the archive hash, verifies all nine expected files, and keeps raw data out of Git.
+
+### Offline engineering demo
+
+```powershell
+python -m recoveriq.cli pipeline --demo --rows 2500
+streamlit run app.py
+```
+
+Every demo screen and generated report is marked **DEMO DATA ONLY**. Replace it with the real pipeline before publishing results.
+
+## API
+
+```bash
+uvicorn recoveriq.api:app --reload
+```
+
+Open `http://localhost:8000/docs`. The public contract is:
+
+- `POST /predict`: approval-time fields → calibrated late probability, risk band and leading local contributions
+- `GET /model-info`: version, threshold, features, drivers and intended use
+- `GET /health`: service and artifact status
+
+Unavailable-at-approval fields such as actual shipping time, delivery time and review score are absent from the request schema by design.
+
+## Data science contract
+
+- **Prediction unit:** one approved order
+- **Target:** actual delivery date later than promised date
+- **Primary model metric:** PR-AUC; decision metric: expected cost with a documented 5:1 false-negative/false-positive ratio
+- **Causal exposure:** observed late delivery
+- **Causal outcomes:** low review and repeat purchase within 90 days
+- **North-star product metric:** observed 90-day repeat-purchase rate
+- **Experiment unit:** customer, preventing cross-order contamination
+- **Experiment primary metric:** 90-day repeat purchase
+- **Guardrails:** cancellations, refunds when available, low reviews, offer cost, false-positive interventions and regional performance
+
+## Repository map
+
+```text
+models/                 dbt warehouse, features, outcomes and tests
+src/recoveriq/          ingestion, modeling, causal, experiment, API and monitoring code
+tests/                  unit, contract and API tests
+reports/                product brief, model/causal reports and career materials
+artifacts/              generated model and metrics (not committed)
+app.py                  four-view Streamlit decision product
+Dockerfile              production-style API image
+render.yaml             free-tier API deployment blueprint
+```
+
+## Deployment
+
+1. Push the repository after generating a real-data model artifact or publish the artifact through a release/object store.
+2. Create the API from `render.yaml`; free Render services can cold-start after inactivity.
+3. Create a Streamlit Community Cloud app pointing to `app.py`.
+4. Put both URLs at the top of this README and verify them in a private browser window.
+
+Account-owned deployment is deliberately not automated from this repository. See [deployment.md](reports/deployment.md) for the checklist.
+
+## Honest limitations
+
+The source covers a historical Brazilian marketplace and cannot establish current Indian e-commerce performance. Observational causal estimates depend on measured confounders. Seller histories are sparse early in time. Repeat purchase is censored near the data boundary. A recovery offer remains a hypothesis until randomized. These are reasons to monitor and experiment, not footnotes to hide.
+

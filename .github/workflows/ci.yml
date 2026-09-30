@@ -1,0 +1,24 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check src tests app.py
+      - run: pytest --cov=recoveriq
+      - run: python -m recoveriq.cli demo-data --force --rows 800
+      - run: python -m recoveriq.cli ingest
+      - run: dbt build --profiles-dir .
+      - run: python -m recoveriq.cli train
+      - run: python -m recoveriq.cli causal --bootstrap 50
+      - run: docker build -t recoveriq:test .
+
